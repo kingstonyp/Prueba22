@@ -1,17 +1,21 @@
-name: CI - Tests (improved)
+name: CI
 
 on:
   push:
+    branches: [ main, master ]
   pull_request:
+    branches: [ main, master ]
 
 jobs:
-  test:
+  build:
     runs-on: ubuntu-latest
     strategy:
       matrix:
         java: [11, 17]
+    env:
+      HEADLESS: "true"
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Set up JDK ${{ matrix.java }}
@@ -19,53 +23,68 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ matrix.java }}
+          cache: 'maven'
 
-      - name: Cache Maven repo
+      - name: Cache ~/.m2 (fallback)
         uses: actions/cache@v4
         with:
           path: ~/.m2/repository
-          key: m2-${{ runner.os }}-java-${{ matrix.java }}-${{ hashFiles('**/pom.xml') }}
+          key: m2-cache-${{ matrix.java }}-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
-            m2-${{ runner.os }}-java-${{ matrix.java }}-
-            m2-${{ runner.os }}-java-
+            m2-cache-${{ matrix.java }}-
 
-      - name: Run tests (headless) - try up to 3 times
+      - name: Show Java
+        run: java -version
+
+      - name: Wait for Chrome availability (info)
+        run: google-chrome --version || true
+
+      - name: Run Maven verify (tests + reports)
+        run: mvn -B -U verify
         env:
-          HEADLESS: 'true'
+          MAVEN_OPTS: -Xmx1024m
+        # If you prefer running a specific runner:
+        # run: HEADLESS=true mvn -B -Dtest=com.mycompany.runners.TestRunner verify
+
+      - name: Generate Allure report (Maven plugin)
+        if: success() || failure()
         run: |
-          set -e
-          n=0
-          max=3
-          until [ $n -ge $max ]
-          do
-            echo "Attempt $((n+1))/$max"
-            mvn -U -B verify && break
-            n=$((n+1))
-            echo "Test attempt $n failed. Retrying..."
-            sleep 2
-          done
-          if [ $n -ge $max ]; then
-            echo "Tests failed after $max attempts"
-            exit 1
+          # Requires Allure maven plugin configured in pom.xml or allure-results in target/allure-results
+          mvn io.qameta.allure:allure-maven:report || true
+          # Copy report to a deterministic folder for artifact upload
+          mkdir -p target/allure-report
+          if [ -d target/site/allure-maven-plugin ]; then
+            cp -r target/site/allure-maven-plugin/* target/allure-report/ || true
+          fi
+          if [ -d target/allure-report ]; then
+            ls -la target/allure-report || true
           fi
 
-      - name: Upload screenshots
+      - name: Archive test artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: screenshots
-          path: target/screenshots
+          name: test-artifacts-${{ matrix.java }}-${{ github.run_id }}
+          path: |
+            target/screenshots
+            target/cucumber-html-reports
+            target/cucumber.json
+            target/surefire-reports
+            target/allure-report
+          retention-days: 7
 
-      - name: Upload surefire reports
-        if: always()
-        uses: actions/upload-artifact@v4
+      - name: Annotate workflow with summary (optional)
+        if: failure()
+        uses: actions/github-script@v6
         with:
-          name: surefire-reports
-          path: target/surefire-reports
-
-      - name: Upload cucumber HTML report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: cucumber-html-report
-          path: target/cucumber-html-reports
+          script: |
+            github.rest.checks.create({
+              name: "CI summary",
+              head_sha: context.sha,
+              status: "completed",
+              conclusion: "failure",
+              output: {
+                title: "CI failed",
+                summary: "Tests failed. Artifacts uploaded. Use gh run download <ID> to get artifacts."
+              }
+            })
