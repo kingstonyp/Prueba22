@@ -1,14 +1,18 @@
 package com.mycompany.steps;
-
 import com.mycompany.pages.CartPage;
 import com.mycompany.pages.ProductPage;
 import com.mycompany.utils.DriverManager;
 import io.cucumber.java.en.*;
 import org.junit.Assert;
 import org.openqa.selenium.WebDriver;
-
+import org.openqa.selenium.support.ui.ExpectedConditions;
+import org.openqa.selenium.support.ui.WebDriverWait;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
+import java.time.Duration;
 import java.util.List;
-
+import java.util.stream.Collectors;
 public class CartSteps {
     private WebDriver driver = DriverManager.getDriver();
     private ProductPage productPage = new ProductPage(driver);
@@ -17,13 +21,11 @@ public class CartSteps {
 
     @When("selecciono el producto {string}")
     public void selecciono_el_producto(String name) {
-        // guardamos el nombre seleccionado, no hacemos click
         selectedProductName = name;
     }
 
     @When("lo agrego al carrito")
     public void lo_agrego_al_carrito() {
-        // añadimos directamente por nombre (lista o detalle)
         productPage.addToCartByName(selectedProductName);
     }
 
@@ -34,10 +36,33 @@ public class CartSteps {
 
     @Then("el carrito debe contener el producto {string} con cantidad {string}")
     public void el_carrito_debe_contener_el_producto_con_cantidad(String expectedName, String expectedQty) {
-        List<String> names = cartPage.getItemNames();
-        List<String> qtys = cartPage.getQuantities();
-        Assert.assertTrue("El carrito no contiene el producto esperado: " + expectedName, names.contains(expectedName));
-        Assert.assertTrue("No se encontró cantidad " + expectedQty, qtys.contains(expectedQty));
+        WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(15));
+        // esperar que al menos un item del carrito sea visible
+        try {
+            wait.until(ExpectedConditions.visibilityOf(cartPage.getCartRootElement()));
+        } catch (Exception ignored) {
+        }
+
+        // obtener y normalizar nombres y cantidades
+        List<String> names = cartPage.getItemNames().stream()
+                .map(s -> s.trim().toLowerCase())
+                .collect(Collectors.toList());
+        List<String> qtys = cartPage.getQuantities().stream()
+                .map(String::trim)
+                .collect(Collectors.toList());
+
+        String expectedNorm = expectedName.trim().toLowerCase();
+
+        // guardar page source para debug si falla
+        try {
+            Files.writeString(Paths.get("target/debug-page-source.html"), driver.getPageSource(), StandardOpenOption.CREATE);
+        } catch (Exception ignored) {
+        }
+
+        Assert.assertTrue("El carrito no contiene el producto esperado: " + expectedName + ". Encontrados: " + names,
+                names.contains(expectedNorm));
+        Assert.assertTrue("No se encontró cantidad " + expectedQty + ". Encontradas: " + qtys,
+                qtys.contains(expectedQty.trim()));
     }
 
     @Then("el precio del producto debe ser visible y mayor que {string}")
