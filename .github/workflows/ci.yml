@@ -1,7 +1,9 @@
 name: CI - Tests (improved)
+
 on:
   push:
   pull_request:
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -10,58 +12,60 @@ jobs:
         java: [11, 17]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4v   - name: Set up JDK ${{ matrix.java }}
-    uses: actions/setup-java@v4
-    with:
-      distribution: temurin
-      java-version: ${{ matrix.java }}
+        uses: actions/checkout@v4
 
-  - name: Cache Maven repo
-    uses: actions/cache@v4
-    with:
-      path: ~/.m2/repository
-      key: m2-${{ runner.os }}-java-${{ matrix.java }}-${{ hashFiles('**/pom.xml') }}
-      restore-keys: |
-        m2-${{ runner.os }}-java-${{ matrix.java }}-
-        m2-${{ runner.os }}-java-
+      - name: Set up JDK ${{ matrix.java }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
 
-  - name: Run tests (headless) - try up to 3 times
-    env:
-      HEADLESS: 'true'
-    run: |
-      set -e
-      n=0
-      max=3
-      until [ $n -ge $max ]
-      do
-        echo "Attempt $((n+1))/$max"
-        mvn -U -B verify && break
-        n=$((n+1))
-        echo "Test attempt $n failed. Retrying..."
-        sleep 2
-      done
-      if [ $n -ge $max ]; then
-        echo "Tests failed after $max attempts"
-        exit 1
-      fi
+      - name: Cache Maven repo
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: m2-${{ runner.os }}-java-${{ matrix.java }}-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            m2-${{ runner.os }}-java-${{ matrix.java }}-
+            m2-${{ runner.os }}-java-
 
-  - name: Upload screenshots
-    if: always()
-    uses: actions/upload-artifact@v4
-    with:
-      name: screenshots
-      path: target/screenshots
+      - name: Run tests (headless) - try up to 3 times
+        env:
+          HEADLESS: 'true'
+        run: |
+          set -e
+          n=0
+          max=3
+          until [ $n -ge $max ]
+          do
+            echo "Attempt $((n+1))/$max"
+            mvn -U -B verify && break
+            n=$((n+1))
+            echo "Test attempt $n failed. Retrying..."
+            sleep 2
+          done
+          if [ $n -ge $max ]; then
+            echo "Tests failed after $max attempts"
+            exit 1
+          fi
 
-  - name: Upload surefire reports
-    if: always()
-    uses: actions/upload-artifact@v4
-    with:
-      name: surefire-reports
-      path: target/surefire-reports
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: target/screenshots
 
-  - name: Upload cucumber HTML report
-    if: always()
-    uses: actions/upload-artifact@v4
-    with:
-      name: cucumber-html-report
-      path: target/cucumber-html-reports
+      - name: Upload surefire reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: target/surefire-reports
+
+      - name: Upload cucumber HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cucumber-html-report
+          path: target/cucumber-html-reports
