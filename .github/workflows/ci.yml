@@ -76,19 +76,5 @@ jobs:
             target/allure-report
           retention-days: 7
 
-      - name: Annotate workflow with summary (optional)
-        if: failure() && github.event_name != 'pull_request'
-        uses: actions/github-script@v6
-        with:
-          script: |
-            github.rest.checks.create({
-              name: "CI summary",
-              head_sha: context.sha,
-              status: "completed",
-              conclusion: "failure",
-              output: {
-                title: "CI failed",
-                summary: "Tests failed. Artifacts uploaded. Use gh run download <ID> to get artifacts."
-              }
-            })
       
+
