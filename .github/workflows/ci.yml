@@ -77,7 +77,7 @@ jobs:
           retention-days: 7
 
       - name: Annotate workflow with summary (optional)
-        if: failure()
+        if: failure() && github.event_name != 'pull_request'
         uses: actions/github-script@v6
         with:
           script: |
@@ -91,3 +91,4 @@ jobs:
                 summary: "Tests failed. Artifacts uploaded. Use gh run download <ID> to get artifacts."
               }
             })
+      
