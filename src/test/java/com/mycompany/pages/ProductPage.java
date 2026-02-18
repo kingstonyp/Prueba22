@@ -69,7 +69,7 @@ public class ProductPage {
         try {
             ((JavascriptExecutor) driver).executeScript("arguments[0].scrollIntoView(true);", btn);
             wait.until(ExpectedConditions.elementToBeClickable(btn));
-            // try normal click first
+            // try normal click first, fallback to JS click
             try {
                 btn.click();
             } catch (Exception clickEx) {
@@ -78,30 +78,37 @@ public class ProductPage {
             }
             log.info("Clicked add-to-cart button for {}", name);
 
-            // Wait for cart badge update (confirm add-to-cart). Fallback to small sleep if badge not present.
-            WebDriverWait waitBadge = new WebDriverWait(driver, Duration.ofSeconds(10));
+            // primary confirmation: wait the same button text to change to "Remove"
             try {
-                waitBadge.until(ExpectedConditions.textToBePresentInElementLocated(
-                        By.cssSelector(".shopping_cart_badge"), "1"));
-                log.info("Cart badge updated");
+                WebDriverWait waitBtn = new WebDriverWait(driver, Duration.ofSeconds(10));
+                waitBtn.until(ExpectedConditions.textToBePresentInElement(btn, "Remove"));
+                log.info("Add-to-cart confirmed by button text for {}", name);
             } catch (Exception ex) {
-                log.warn("Cart badge did not update after addToCart: {}. Will continue as fallback.", ex.getMessage());
+                log.warn("Button did not change to 'Remove' after addToCart: {}. Will try badge check then fallback sleep.", ex.getMessage());
+                // secondary confirmation: cart badge update
                 try {
-                    Thread.sleep(500);
-                } catch (InterruptedException ignored) {
+                    WebDriverWait waitBadge = new WebDriverWait(driver, Duration.ofSeconds(5));
+                    waitBadge.until(ExpectedConditions.textToBePresentInElementLocated(By.cssSelector(".shopping_cart_badge"), "1"));
+                    log.info("Cart badge updated");
+                } catch (Exception ex2) {
+                    log.warn("Cart badge did not update after addToCart: {}. Falling back to small sleep.", ex2.getMessage());
+                    try {
+                        Thread.sleep(500);
+                    } catch (InterruptedException ignored) {
+                    }
                 }
             }
 
         } catch (Exception e) {
             log.warn("Direct click flow failed, using JS click fallback for {}: {}", name, e.getMessage());
             ((JavascriptExecutor) driver).executeScript("arguments[0].click();", btn);
-            // attempt same badge wait after JS click
+            // try confirmations again after JS click
             try {
-                new WebDriverWait(driver, Duration.ofSeconds(10)).until(ExpectedConditions.textToBePresentInElementLocated(
-                        By.cssSelector(".shopping_cart_badge"), "1"));
-                log.info("Cart badge updated after JS click");
+                new WebDriverWait(driver, Duration.ofSeconds(10))
+                        .until(ExpectedConditions.textToBePresentInElement(btn, "Remove"));
+                log.info("Cart add confirmed after JS click by button text for {}", name);
             } catch (Exception ex) {
-                log.warn("Cart badge did not update after JS click: {}", ex.getMessage());
+                log.warn("Confirmations failed after JS click: {}. Falling back to small sleep.", ex.getMessage());
                 try {
                     Thread.sleep(500);
                 } catch (InterruptedException ignored) {
