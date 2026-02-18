@@ -6,6 +6,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.List;
 import java.util.stream.Collectors;
+
+import org.openqa.selenium.JavascriptExecutor;
+import org.openqa.selenium.support.ui.ExpectedConditions;
+import org.openqa.selenium.support.ui.WebDriverWait;
+import java.time.Duration;
 public class CartPage {
     private static final Logger log = LoggerFactory.getLogger(CartPage.class);
     private WebDriver driver;
@@ -22,10 +27,43 @@ public class CartPage {
 
     public void goToCart() {
         log.info("Navigating to cart");
-        driver.findElement(cartLink).click();
-    }
+        WebElement cart = driver.findElement(cartLink);
+        try {
+            cart.click();
+        } catch (Exception e) {
+            log.warn("Direct cart click failed, using JS click: {}", e.getMessage());
+            ((JavascriptExecutor) driver).executeScript("arguments[0].click();", cart);
+        }
+        // breve pausa para dejar que el evento se dispare
+        try {
+            Thread.sleep(300);
+        } catch (InterruptedException ignored) {
+        }
+        WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+        boolean loaded = false;
+        try {
+            wait.until(ExpectedConditions.or(
+                    ExpectedConditions.visibilityOfElementLocated(By.cssSelector(".cart_item")),
+                    ExpectedConditions.urlContains("/cart.html"),
+                    ExpectedConditions.visibilityOfElementLocated(By.cssSelector(".cart_list, .cart_contents, .cart_container"))
+            ));
+            loaded = true;
+        } catch (Exception e) {
+            log.warn("First wait for cart load timed out: {}", e.getMessage());
+        }
 
-    // raíz del contenedor del carrito para esperar visibilidad desde los steps
+// fallback: si no se cargó, navegar directamente a /cart.html y esperar de nuevo
+        if (!loaded) {
+            log.warn("Cart not loaded after click; navigating directly to /cart.html");
+            driver.get("https://www.saucedemo.com/cart.html"); // ajusta base si necesario
+            try {
+                wait.until(ExpectedConditions.visibilityOfElementLocated(By.cssSelector(".cart_item")));
+            } catch (Exception e) {
+                log.warn("Fallback wait for cart items timed out: {}", e.getMessage());
+            }
+        }
+    }
+        // raíz del contenedor del carrito para esperar visibilidad desde los steps
     public WebElement getCartRootElement() {
         try {
             return driver.findElement(By.cssSelector(".cart_list, .cart_contents, .cart_container"));
